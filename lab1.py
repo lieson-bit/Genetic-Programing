@@ -59,31 +59,44 @@ def mutate(pop):
 def run_ga(x_min, x_max):
     pop = init_population()
     history = []
+    best_x, best_f = None, -np.inf
 
     for gen in range(GENERATIONS):
         fitness = evaluate(pop, x_min, x_max)
         xs = np.array([binary_to_real(chrom, x_min, x_max) for chrom in pop])
         history.append((xs, fitness))
 
+        # Track the best solution
+        idx = np.argmax(fitness)
+        if fitness[idx] > best_f:
+            best_f = fitness[idx]
+            best_x = xs[idx]
+
         pop = select(pop, fitness)
         pop = crossover(pop)
         pop = mutate(pop)
 
-    return history
+    return history, best_x, best_f
 
-# Combine histories from both intervals
+# Combine histories from both intervals and find overall best
 history = []
+best_global_x, best_global_f = None, -np.inf
+
 for (x_min, x_max) in intervals:
-    history += run_ga(x_min, x_max)
+    h, x, fx = run_ga(x_min, x_max)
+    history += h
+    if fx > best_global_f:
+        best_global_f = fx
+        best_global_x = x
+
+print(f"\n✅ Global maximum found: f(x)={best_global_f:.5f} at x={best_global_x:.5f}")
 
 # Plot setup
 fig, ax = plt.subplots()
 x_vals_left = np.linspace(-10, 2-1e-3, 1000)
 x_vals_right = np.linspace(2+1e-3, 10, 1000)
-y_vals_left = f(x_vals_left)
-y_vals_right = f(x_vals_right)
-ax.plot(x_vals_left, y_vals_left, 'r', label="f(x)")
-ax.plot(x_vals_right, y_vals_right, 'r')
+ax.plot(x_vals_left, f(x_vals_left), 'r', label="f(x)")
+ax.plot(x_vals_right, f(x_vals_right), 'r')
 
 scat = ax.scatter([], [], c='b', s=20)
 ax.set_xlim(-10, 10)
