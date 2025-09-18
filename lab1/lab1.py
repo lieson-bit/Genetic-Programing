@@ -9,9 +9,9 @@ def f(x):
     return np.cos(2*x) / np.abs(x - 2)
 
 # GA parameters
-POP_SIZE = 100
+POP_SIZE = 50
 GENES = 16
-GENERATIONS = 100
+GENERATIONS = 50
 CROSSOVER_RATE = 0.7
 MUTATION_RATE = 0.01
 
