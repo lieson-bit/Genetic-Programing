@@ -1,0 +1,460 @@
+%% 🧠 Lab Task: Optimization of Benchmark Functions using Genetic Algorithm
+% Author: Lieson
+% Description: This script implements a custom GA to find minima of benchmark functions for n=2 and n=3,
+% visualizes the process, and analyzes parameter dependence.
+
+clc; clear; close all; % Clear workspace and figures
+
+%% ⚙️ Configuration Parameters
+visualizationMode = 'full';  % 'full', '2donly', 'minimal', 'none'
+visualizationUpdateRate = 3;  % Update plots every N generations
+minDeltaTime = 0.1;           % Minimum time between updates (seconds)
+pauseDuration = 0.05;         % Pause duration between updates
+
+%% 🔢 1. Define Benchmark Functions and Parameters
+
+% For n=2: Goldstein-Price Function
+goldstein_price = @(x) (1 + (x(1) + x(2) + 1).^2 .* (19 - 14*x(1) + 3*x(1).^2 - 14*x(2) + 6*x(1)*x(2) + 3*x(2).^2)) .* ...
+    (30 + (2*x(1) - 3*x(2)).^2 .* (18 - 32*x(1) + 12*x(1).^2 + 48*x(2) - 36*x(1)*x(2) + 27*x(2).^2));
+
+% Known global minimum for Goldstein-Price
+gp_global_min = [0, -1];
+gp_global_val = 3;
+
+% For n=3: Three-Dimensional Rastrigin Function
+rastrigin_3d = @(x) 10 * 3 + sum(x.^2 - 10 * cos(2 * pi * x));
+rastrigin_global_min = [0, 0, 0];
+rastrigin_global_val = 0;
+
+fprintf('Benchmark Functions Defined:\n');
+fprintf('1. Goldstein-Price (n=2). Global min: f(%s) = %.4f\n', num2str(gp_global_min), gp_global_val);
+fprintf('2. Rastrigin (n=3). Global min: f(%s) = %.4f\n\n', num2str(rastrigin_global_min), rastrigin_global_val);
+
+%% 🌄 2. Visualize the n=2 Goldstein-Price Function
+fprintf('Generating 3D surface plot for Goldstein-Price (n=2)...\n');
+
+[x1, x2] = meshgrid(-2:0.05:2, -2:0.05:2);
+f_values = arrayfun(@(a, b) goldstein_price([a, b]), x1, x2);
+
+figSurface = figure('Name', 'Function Surface', 'Position', [100 100 800 600]);
+surf(x1, x2, f_values, 'EdgeColor', 'none');
+colormap('jet'); colorbar;
+xlabel('x_1'); ylabel('x_2'); zlabel('f(x_1, x_2)');
+title('🌄 Goldstein-Price Function Surface (n=2)');
+view(45, 30); grid on; hold on;
+plot3(gp_global_min(1), gp_global_min(2), gp_global_val, 'rp', 'MarkerSize', 15, 'MarkerFaceColor', 'r');
+legend('Surface', 'Global Minimum', 'Location', 'best');
+hold off;
+
+%% 🧬 3.1 Custom GA Implementation with Optimized Visualization for n=2
+fprintf('Setting up Custom GA for n=2 with optimized visualization...\n');
+
+% GA Parameters for n=2
+nDim = 2;
+lb = [-2, -2];
+ub = [2, 2];
+popSize = 50;
+maxGen = 100;
+maxStallGens = 15;
+mutationRate = 0.1;
+crossoverRate = 0.8;
+eliteCount = 2;
+
+% Initialize population
+population = rand(popSize, nDim) .* (ub - lb) + lb;
+
+% Pre-allocate arrays for history
+bestFitnessHistory = zeros(maxGen, 1);
+bestIndividualHistory = zeros(maxGen, nDim);
+stallCounter = 0;
+generationTimestamps = zeros(maxGen, 1);
+lastUpdateTime = tic;
+
+% Setup the contour plot for animation
+if ~strcmp(visualizationMode, 'none')
+    figAnimation = figure('Name', 'GA Optimization 2D', 'Position', [100 100 900 700]);
+    contour(x1, x2, log(f_values), 50);
+    hold on;
+    h_global = plot(gp_global_min(1), gp_global_min(2), 'rp', 'MarkerSize', 20, 'MarkerFaceColor', 'r');
+    h_pop = plot(population(:,1), population(:,2), 'ko', 'MarkerSize', 4, 'MarkerFaceColor', 'k');
+    h_best = plot(nan, nan, 'go', 'MarkerSize', 12, 'MarkerFaceColor', 'g');
+    
+    % Add optimization path tracking
+    h_path = plot(nan, nan, 'b-', 'LineWidth', 1.5, 'Color', [0 0.4470 0.7410 0.3]);
+    
+    xlabel('x_1'); ylabel('x_2');
+    title('GA Optimization 2D: Generation 0');
+    legend([h_global, h_best, h_pop, h_path], 'Global Min', 'GA Best', 'Population', 'Optimization Path', 'Location', 'best');
+    colorbar;
+    hold off;
+    
+    % Setup 3D GA Visualization if enabled
+    if strcmp(visualizationMode, 'full')
+        fig3D = figure('Name', 'GA Optimization 3D', 'Position', [300 100 900 700]);
+        surfHandle = surf(x1, x2, f_values, 'EdgeColor', 'none', 'FaceAlpha', 0.4);
+        colormap('jet'); colorbar; hold on;
+        h_global3D = plot3(gp_global_min(1), gp_global_min(2), gp_global_val, 'rp', 'MarkerSize', 15, 'MarkerFaceColor', 'r');
+        
+        % Use scatter3 for better performance
+        h_pop3D = scatter3(nan, nan, nan, 30, 'k', 'filled', 'MarkerFaceAlpha', 0.6);
+        h_best3D = scatter3(nan, nan, nan, 100, 'g', 'filled');
+        
+        % Add 3D optimization path
+        h_path3D = plot3(nan, nan, nan, 'b-', 'LineWidth', 2, 'Color', [0 0.4470 0.7410 0.4]);
+        
+        xlabel('x_1'); ylabel('x_2'); zlabel('f(x_1,x_2)');
+        title('GA Optimization 3D: Generation 0');
+        view(45, 30); grid on;
+        legend([h_global3D, h_best3D, h_pop3D, h_path3D], 'Global Min', 'GA Best', 'Population', 'Optimization Path', 'Location', 'best');
+        hold off;
+    end
+end
+
+fprintf('Starting optimization with %s visualization mode...\n', visualizationMode);
+
+% Main GA Loop
+for gen = 1:maxGen
+    generationTimestamps(gen) = toc;
+    
+    % 1. Evaluation
+    fitness = zeros(popSize, 1);
+    for i = 1:popSize
+        fitness(i) = goldstein_price(population(i, :));
+    end
+    
+    % 2. Selection & Elitism
+    [sortedFitness, sortIndex] = sort(fitness);
+    population = population(sortIndex, :);
+    
+    bestFitnessHistory(gen) = sortedFitness(1);
+    bestIndividualHistory(gen, :) = population(1, :);
+    
+    % 3. Check Stopping Criterion (Stall Generations)
+    if gen > 1
+        if abs(bestFitnessHistory(gen) - bestFitnessHistory(gen-1)) < 1e-6
+            stallCounter = stallCounter + 1;
+        else
+            stallCounter = 0;
+        end
+    end
+    if stallCounter >= maxStallGens
+        fprintf('Stopping: Best fitness stalled for %d generations.\n', maxStallGens);
+        break;
+    end
+    
+    % 4. Create new population
+    newPopulation = population(1:eliteCount, :); % Elitism
+    for i = 1:(popSize - eliteCount)
+        % Tournament Selection
+        candidates = randperm(popSize, 2);
+        if fitness(candidates(1)) < fitness(candidates(2))
+            parent1 = population(candidates(1), :);
+        else
+            parent1 = population(candidates(2), :);
+        end
+        
+        candidates = randperm(popSize, 2);
+        if fitness(candidates(1)) < fitness(candidates(2))
+            parent2 = population(candidates(1), :);
+        else
+            parent2 = population(candidates(2), :);
+        end
+        
+        % Crossover (Blend)
+        if rand < crossoverRate
+            alpha = rand;
+            child = alpha * parent1 + (1 - alpha) * parent2;
+        else
+            child = parent1;
+        end
+        
+        % Mutation (Gaussian)
+        for j = 1:nDim
+            if rand < mutationRate
+                sigma = (ub(j) - lb(j)) / 20;
+                child(j) = child(j) + sigma * randn;
+            end
+        end
+        child = max(min(child, ub), lb); % Apply bounds
+        newPopulation = [newPopulation; child];
+    end
+    population = newPopulation;
+    
+    % 5. OPTIMIZED VISUALIZATION UPDATE
+    currentTime = toc(lastUpdateTime);
+    shouldUpdate = mod(gen, visualizationUpdateRate) == 0 || ...
+                  currentTime >= minDeltaTime || ...
+                  gen == 1 || gen == maxGen || ...
+                  stallCounter >= maxStallGens;
+    
+    if shouldUpdate && ~strcmp(visualizationMode, 'none')
+        try
+            % Update 2D Plot
+            set(h_pop, 'XData', population(:,1), 'YData', population(:,2));
+            set(h_best, 'XData', bestIndividualHistory(gen, 1), 'YData', bestIndividualHistory(gen, 2));
+            
+            % Update optimization path
+            if gen > 1
+                pathX = [get(h_path, 'XData'), bestIndividualHistory(gen, 1)];
+                pathY = [get(h_path, 'YData'), bestIndividualHistory(gen, 2)];
+                set(h_path, 'XData', pathX, 'YData', pathY);
+            end
+            
+            set(figAnimation, 'Name', sprintf('GA Optimization 2D: Generation %d | Best Fit: %.4f', gen, bestFitnessHistory(gen)));
+            
+            % Update 3D Plot if enabled
+            if strcmp(visualizationMode, 'full')
+                zPop = arrayfun(@(i) goldstein_price(population(i,:)), 1:popSize);
+                bestZ = goldstein_price(bestIndividualHistory(gen, :));
+                
+                set(h_pop3D, 'XData', population(:,1), 'YData', population(:,2), 'ZData', zPop);
+                set(h_best3D, 'XData', bestIndividualHistory(gen, 1), 'YData', bestIndividualHistory(gen, 2), 'ZData', bestZ);
+                
+                % Update 3D optimization path
+                if gen > 1
+                    pathX3D = [get(h_path3D, 'XData'), bestIndividualHistory(gen, 1)];
+                    pathY3D = [get(h_path3D, 'YData'), bestIndividualHistory(gen, 2)];
+                    pathZ3D = [get(h_path3D, 'ZData'), bestZ];
+                    set(h_path3D, 'XData', pathX3D, 'YData', pathY3D, 'ZData', pathZ3D);
+                end
+                
+                set(fig3D, 'Name', sprintf('GA Optimization 3D: Generation %d | Best Fit: %.4f', gen, bestFitnessHistory(gen)));
+            end
+            
+            % Efficient display update
+            drawnow limitrate nocallbacks
+            pause(pauseDuration);
+            
+            lastUpdateTime = tic; % Reset timer
+            fprintf('Generation %d: Best Fitness = %.6f\n', gen, bestFitnessHistory(gen));
+            
+        catch ME
+            fprintf('Visualization update skipped at generation %d due to error: %s\n', gen, ME.message);
+            % Offer to continue without visualization
+            if contains(ME.message, 'scene') || contains(ME.message, 'rendering')
+                choice = questdlg('Graphics rendering error. Continue without visualization?', ...
+                    'Visualization Error', 'Yes', 'No', 'Yes');
+                if strcmp(choice, 'Yes')
+                    visualizationMode = 'none';
+                    fprintf('Continuing without visualization...\n');
+                else
+                    error('Visualization failed: %s', ME.message);
+                end
+            end
+        end
+    end
+end
+
+% Final visualization update
+if ~strcmp(visualizationMode, 'none')
+    try
+        set(figAnimation, 'Name', sprintf('GA Optimization 2D: Final Generation %d | Best Fit: %.6f', gen, bestFitnessHistory(gen)));
+        if strcmp(visualizationMode, 'full')
+            set(fig3D, 'Name', sprintf('GA Optimization 3D: Final Generation %d | Best Fit: %.6f', gen, bestFitnessHistory(gen)));
+        end
+        drawnow;
+    catch ME
+        fprintf('Final visualization update skipped due to rendering error\n');
+    end
+end
+
+% Find overall best solution
+[bestFval, bestGen] = min(bestFitnessHistory(1:gen));
+bestSolution = bestIndividualHistory(bestGen, :);
+
+fprintf('\n✅ Custom GA for n=2 Complete!\n');
+fprintf('Stopped at generation: %d\n', gen);
+fprintf('Solution: x = [%.6f, %.6f], f = %.6f\n', bestSolution(1), bestSolution(2), bestFval);
+fprintf('Accuracy (|f - 3|): %.6e\n', abs(bestFval - 3));
+
+%% 📊 3.2 Final Results and Convergence Plot for n=2
+figure('Name', 'GA Convergence Analysis', 'Position', [100 100 1000 400]);
+
+subplot(1,2,1);
+plot(1:gen, bestFitnessHistory(1:gen), 'b-', 'LineWidth', 1.5);
+hold on;
+plot(find(bestFitnessHistory(1:gen) == bestFval), bestFval, 'ro', 'MarkerSize', 8, 'MarkerFaceColor', 'r');
+xlabel('Generation'); ylabel('Best Function Value'); 
+title('Convergence History'); 
+grid on;
+legend('Best Fitness', 'Optimal Solution', 'Location', 'best');
+
+subplot(1,2,2);
+semilogy(1:gen, bestFitnessHistory(1:gen) - gp_global_val, 'r-', 'LineWidth', 1.5);
+xlabel('Generation'); ylabel('Error (log scale)'); 
+title('Error Convergence'); 
+grid on;
+
+
+%% 🔄 3.3 Comparison with Standard Genetic Algorithm Toolbox
+fprintf('\n---\n');
+fprintf('Running Standard GA Toolbox for comparison...\n');
+
+if license('test','Global_Optimization_Toolbox')
+    try
+        % Configure standard GA
+        gaOptions = optimoptions('ga', ...
+            'PopulationSize', 50, ...
+            'CrossoverFraction', 0.8, ...
+            'MutationFcn', @mutationgaussian, ...
+            'MaxGenerations', 100, ...
+            'MaxStallGenerations', 15, ...
+            'FunctionTolerance', 1e-6, ...
+            'Display', 'iter');
+        
+        tic;
+        [ga_solution, ga_fval, ga_exitflag, ga_output] = ga(goldstein_price, 2, [], [], [], [], lb, ub, [], gaOptions);
+        ga_time = toc;
+        
+        fprintf('\n🔍 Comparison Results:\n');
+        fprintf('+---------------------+---------------------+---------------------+\n');
+        fprintf('| Metric              | Custom GA           | Standard GA         |\n');
+        fprintf('+---------------------+---------------------+---------------------+\n');
+        fprintf('| Solution (x1)       | %10.6f         | %10.6f         |\n', bestSolution(1), ga_solution(1));
+        fprintf('| Solution (x2)       | %10.6f         | %10.6f         |\n', bestSolution(2), ga_solution(2));
+        fprintf('| Function Value      | %10.6f         | %10.6f         |\n', bestFval, ga_fval);
+        fprintf('| Generations         | %10d         | %10d         |\n', gen, ga_output.generations);
+        fprintf('| Time (seconds)      | %10.3f         | %10.3f         |\n', mean([results{2}.Time]), ga_time);
+        fprintf('| Error (|f-3|)       | %10.2e         | %10.2e         |\n', abs(bestFval-3), abs(ga_fval-3));
+        fprintf('+---------------------+---------------------+---------------------+\n');
+        
+    catch ME
+        fprintf('Global Optimization Toolbox not available: %s\n', ME.message);
+        fprintf('Skipping standard GA comparison...\n');
+    end
+else
+    fprintf('Global Optimization Toolbox license not available.\n');
+    fprintf('Please install the toolbox or use university computers with full MATLAB license.\n');
+end
+
+%% 🔬 4. Parameter Analysis for n=2
+fprintf('\n---\n');
+fprintf('Running Parameter Analysis for n=2...\n');
+
+paramSets = {
+    struct('popSize', 30, 'crossRate', 0.7, 'mutRate', 0.2), ...
+    struct('popSize', 50, 'crossRate', 0.8, 'mutRate', 0.1), ...
+    struct('popSize', 100, 'crossRate', 0.9, 'mutRate', 0.05)
+};
+
+results = cell(1, numel(paramSets));
+for i = 1:numel(paramSets)
+    params = paramSets{i};
+    tic;
+    [bestFval, bestSol, generations] = runCustomGAAnalysis(lb, ub, goldstein_price, params.popSize, params.crossRate, params.mutRate);
+    timeElapsed = toc;
+    
+    results{i} = struct(...
+        'Parameters', params, ...
+        'Solution', bestSol, ...
+        'Fitness', bestFval, ...
+        'Generations', generations, ...
+        'Time', timeElapsed, ...
+        'Error', abs(bestFval - gp_global_val) ...
+    );
+end
+
+% Display results in a formatted table
+fprintf('\nParameter Analysis Results:\n');
+fprintf('+---------+-----------+---------+-------------+----------+-----------+\n');
+fprintf('| PopSize | CrossRate | MutRate | Generations | Time (s) | Error     |\n');
+fprintf('+---------+-----------+---------+-------------+----------+-----------+\n');
+for i = 1:numel(results)
+    r = results{i};
+    fprintf('| %7d | %9.2f | %7.2f | %11d | %8.3f | %.4e |\n', ...
+        r.Parameters.popSize, r.Parameters.crossRate, r.Parameters.mutRate, ...
+        r.Generations, r.Time, r.Error);
+end
+fprintf('+---------+-----------+---------+-------------+----------+-----------+\n');
+
+%% 🧪 5. Custom GA Implementation for n=3 (Rastrigin Function)
+fprintf('\n---\n');
+fprintf('Running Custom GA for Rastrigin Function (n=3)...\n');
+
+nDim3 = 3;
+lb3 = [-5.12, -5.12, -5.12];
+ub3 = [5.12, 5.12, 5.12];
+
+tic;
+[bestFval3, bestSolution3, generations3] = runCustomGAAnalysis(lb3, ub3, rastrigin_3d, 100, 0.8, 0.1);
+timeElapsed3 = toc;
+
+fprintf('✅ Custom GA for n=3 Complete!\n');
+fprintf('Solution: x = [%s], f = %.6f\n', num2str(bestSolution3, '%.4f '), bestFval3);
+fprintf('Generations: %d, Time: %.3f seconds\n', generations3, timeElapsed3);
+fprintf('Accuracy (|f - 0|): %.6e\n', abs(bestFval3));
+
+% Performance comparison
+fprintf('\nPerformance Comparison:\n');
+fprintf('n=2 (Goldstein-Price): %d generations, %.3f seconds\n', gen, mean([results{2}.Time]));
+fprintf('n=3 (Rastrigin): %d generations, %.3f seconds\n', generations3, timeElapsed3);
+
+%% ✅ Supporting Functions
+function [bestFval, bestSolution, lastGen] = runCustomGAAnalysis(lb, ub, fitnessFunc, popSize, crossoverRate, mutationRate)
+    nDim = length(lb);
+    maxGen = 200;
+    maxStallGens = 20;
+    eliteCount = 2;
+    
+    population = rand(popSize, nDim) .* (ub - lb) + lb;
+    bestFitnessHistory = zeros(maxGen, 1);
+    stallCounter = 0;
+    
+    for gen = 1:maxGen
+        fitness = arrayfun(@(i) fitnessFunc(population(i,:)), 1:popSize)';
+        [sortedFitness, sortIndex] = sort(fitness);
+        population = population(sortIndex, :);
+        bestFitnessHistory(gen) = sortedFitness(1);
+        
+        if gen > 1 && abs(bestFitnessHistory(gen) - bestFitnessHistory(gen-1)) < 1e-6
+            stallCounter = stallCounter + 1;
+            if stallCounter >= maxStallGens
+                break;
+            end
+        else
+            stallCounter = 0;
+        end
+        
+        newPopulation = population(1:eliteCount, :);
+        for i = 1:(popSize - eliteCount)
+            % Tournament selection
+            candidates = randperm(popSize, 2);
+            if fitness(candidates(1)) < fitness(candidates(2))
+                parent1 = population(candidates(1), :);
+            else
+                parent1 = population(candidates(2), :);
+            end
+            
+            candidates = randperm(popSize, 2);
+            if fitness(candidates(1)) < fitness(candidates(2))
+                parent2 = population(candidates(1), :);
+            else
+                parent2 = population(candidates(2), :);
+            end
+            
+            % Crossover
+            if rand < crossoverRate
+                alpha = rand(1, nDim);
+                child = alpha .* parent1 + (1 - alpha) .* parent2;
+            else
+                child = parent1;
+            end
+            
+            % Mutation
+            for j = 1:nDim
+                if rand < mutationRate
+                    sigma = (ub(j) - lb(j)) / 20;
+                    child(j) = child(j) + sigma * randn;
+                end
+            end
+            child = max(min(child, ub), lb);
+            newPopulation = [newPopulation; child];
+        end
+        population = newPopulation;
+    end
+    lastGen = gen;
+    bestFval = bestFitnessHistory(gen);
+    bestSolution = population(1, :);
+end
+
+
