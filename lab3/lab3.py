@@ -427,7 +427,9 @@ class ImprovedKnapsackGA:
             'worst_fitness_history': worst_fitness_history,
             'diversity_history': diversity_history,
             'execution_time': execution_time,
-            'final_population': population
+            'final_population': population,
+            'fitness_function': self.fitness,  # Store the fitness function
+            'ga_instance': self  # Store the GA instance for later use
         }
     
     def _calculate_diversity_binary(self, population: List[List[int]]) -> float:
@@ -492,7 +494,9 @@ def analyze_and_visualize_results(problem_name, results, optimal_value=None):
     axes[0, 1].grid(True, alpha=0.3)
     
     # Plot 3: Fitness distribution at convergence
-    final_fitnesses = [results['fitness_function'](ind) for ind in results['final_population']]
+    # Safe access to fitness function
+    fitness_func = results.get('fitness_function', results.get('ga_instance').fitness)
+    final_fitnesses = [fitness_func(ind) for ind in results['final_population']]
     axes[0, 2].hist(final_fitnesses, bins=20, alpha=0.7, color='orange', edgecolor='black')
     axes[0, 2].axvline(x=best_fitness, color='red', linestyle='--', linewidth=2, 
                       label=f'Best: {best_fitness:,}')
@@ -557,6 +561,160 @@ def analyze_and_visualize_results(problem_name, results, optimal_value=None):
         print(f"   Total weight: {total_weight:,}/{results['capacity']:,}")
         print(f"   Solution vector: {binary_sol}")
 
+def create_enhanced_plots(problem_name, results_dict, optimal_value=None, encoding_results=None):
+    """Create enhanced plots including all requested visualizations"""
+    
+    # Create a large figure with multiple subplots
+    fig = plt.figure(figsize=(20, 15))
+    
+    # Plot 1: Best Fitness vs Generation
+    ax1 = plt.subplot(3, 3, 1)
+    for label, results in results_dict.items():
+        ax1.plot(results['best_fitness_history'], label=label, linewidth=2)
+    if optimal_value:
+        ax1.axhline(y=optimal_value, color='red', linestyle='--', linewidth=2, label='Optimal')
+    ax1.set_xlabel('Generation')
+    ax1.set_ylabel('Best Fitness')
+    ax1.set_title(f'{problem_name} - Best Fitness vs Generation')
+    ax1.legend()
+    ax1.grid(True, alpha=0.3)
+    
+    # Plot 2: Average Fitness vs Generation
+    ax2 = plt.subplot(3, 3, 2)
+    for label, results in results_dict.items():
+        ax2.plot(results['avg_fitness_history'], label=label, linewidth=2)
+    ax2.set_xlabel('Generation')
+    ax2.set_ylabel('Average Fitness')
+    ax2.set_title(f'{problem_name} - Average Fitness vs Generation')
+    ax2.legend()
+    ax2.grid(True, alpha=0.3)
+    
+    # Plot 3: Execution Time vs Parameter Setting
+    ax3 = plt.subplot(3, 3, 3)
+    param_names = list(results_dict.keys())
+    execution_times = [results['execution_time'] for results in results_dict.values()]
+    bars = ax3.bar(param_names, execution_times, color='lightcoral', alpha=0.7)
+    ax3.set_xlabel('Parameter Setting')
+    ax3.set_ylabel('Execution Time (seconds)')
+    ax3.set_title(f'{problem_name} - Execution Time vs Parameter Setting')
+    ax3.tick_params(axis='x', rotation=45)
+    ax3.grid(True, alpha=0.3)
+    
+    # Add value labels on bars
+    for bar, value in zip(bars, execution_times):
+        ax3.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.1, 
+                f'{value:.2f}s', ha='center', va='bottom', fontsize=9)
+    
+    # Plot 4: Encoding Type Comparison - Best Fitness
+    if encoding_results:
+        ax4 = plt.subplot(3, 3, 4)
+        encoding_names = list(encoding_results.keys())
+        best_fitnesses = [results['best_fitness'] for results in encoding_results.values()]
+        bars = ax4.bar(encoding_names, best_fitnesses, color='lightgreen', alpha=0.7)
+        ax4.set_xlabel('Encoding Type')
+        ax4.set_ylabel('Best Fitness')
+        ax4.set_title('Encoding Type Comparison - Best Fitness')
+        ax4.grid(True, alpha=0.3)
+        
+        # Add value labels on bars
+        for bar, value in zip(bars, best_fitnesses):
+            ax4.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 100000, 
+                    f'{value:,}', ha='center', va='bottom', fontsize=9)
+    
+    # Plot 5: Encoding Type Comparison - Execution Time
+    if encoding_results:
+        ax5 = plt.subplot(3, 3, 5)
+        encoding_names = list(encoding_results.keys())
+        execution_times = [results['execution_time'] for results in encoding_results.values()]
+        bars = ax5.bar(encoding_names, execution_times, color='lightblue', alpha=0.7)
+        ax5.set_xlabel('Encoding Type')
+        ax5.set_ylabel('Execution Time (seconds)')
+        ax5.set_title('Encoding Type Comparison - Execution Time')
+        ax5.grid(True, alpha=0.3)
+        
+        # Add value labels on bars
+        for bar, value in zip(bars, execution_times):
+            ax5.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.1, 
+                    f'{value:.2f}s', ha='center', va='bottom', fontsize=9)
+    
+    # Plot 6: Convergence Speed Comparison
+    ax6 = plt.subplot(3, 3, 6)
+    for label, results in results_dict.items():
+        # Normalize fitness to percentage of maximum
+        if optimal_value:
+            normalized_fitness = [f/optimal_value*100 for f in results['best_fitness_history']]
+            ax6.plot(normalized_fitness, label=label, linewidth=2)
+        else:
+            max_fitness = max(results['best_fitness_history'])
+            normalized_fitness = [f/max_fitness*100 for f in results['best_fitness_history']]
+            ax6.plot(normalized_fitness, label=label, linewidth=2)
+    ax6.set_xlabel('Generation')
+    ax6.set_ylabel('Fitness (% of Maximum)')
+    ax6.set_title(f'{problem_name} - Convergence Speed')
+    ax6.legend()
+    ax6.grid(True, alpha=0.3)
+    
+    # Plot 7: Parameter Performance Heatmap (if we have multiple parameters)
+    if len(results_dict) > 1:
+        ax7 = plt.subplot(3, 3, 7)
+        param_names = list(results_dict.keys())
+        fitness_values = [results['best_fitness'] for results in results_dict.values()]
+        
+        # Create a simple bar chart showing performance
+        bars = ax7.bar(range(len(param_names)), fitness_values, 
+                      color=plt.cm.viridis(np.linspace(0, 1, len(param_names))))
+        ax7.set_xlabel('Parameter Settings')
+        ax7.set_ylabel('Best Fitness')
+        ax7.set_title('Parameter Performance Ranking')
+        ax7.set_xticks(range(len(param_names)))
+        ax7.set_xticklabels(param_names, rotation=45)
+        ax7.grid(True, alpha=0.3)
+        
+        # Add value labels
+        for i, (bar, value) in enumerate(zip(bars, fitness_values)):
+            ax7.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 100000, 
+                    f'{value:,}', ha='center', va='bottom', fontsize=8)
+    
+    # Plot 8: Diversity Comparison
+    ax8 = plt.subplot(3, 3, 8)
+    for label, results in results_dict.items():
+        ax8.plot(results['diversity_history'], label=label, linewidth=1)
+    ax8.set_xlabel('Generation')
+    ax8.set_ylabel('Diversity')
+    ax8.set_title(f'{problem_name} - Population Diversity')
+    ax8.legend()
+    ax8.grid(True, alpha=0.3)
+    
+    # Plot 9: Final Solution Quality Distribution (with safe access)
+    ax9 = plt.subplot(3, 3, 9)
+    all_final_fitnesses = []
+    labels = []
+    for label, results in results_dict.items():
+        # Safe access to fitness function
+        fitness_func = results.get('fitness_function')
+        if fitness_func is None:
+            # Fallback to GA instance fitness method
+            fitness_func = results['ga_instance'].fitness
+        final_fitnesses = [fitness_func(ind) for ind in results['final_population']]
+        all_final_fitnesses.append(final_fitnesses)
+        labels.append(label)
+    
+    if all_final_fitnesses:  # Only plot if we have data
+        box_plot = ax9.boxplot(all_final_fitnesses, labels=labels, patch_artist=True)
+        # Add colors to boxes
+        colors = ['lightblue', 'lightgreen', 'lightcoral', 'lightyellow', 'lightpink', 'lightgray']
+        for patch, color in zip(box_plot['boxes'], colors[:len(labels)]):
+            patch.set_facecolor(color)
+        
+        ax9.set_xlabel('Parameter Setting')
+        ax9.set_ylabel('Final Population Fitness')
+        ax9.set_title(f'{problem_name} - Final Population Distribution')
+        ax9.tick_params(axis='x', rotation=45)
+        ax9.grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    plt.show()
+
 def run_comprehensive_analysis():
     """Run complete analysis for both problems"""
     
@@ -582,7 +740,6 @@ def run_comprehensive_analysis():
     )
     
     # Add additional data for analysis
-    results_simple['fitness_function'] = ga_simple.fitness
     results_simple['weights'] = weights
     results_simple['capacity'] = capacity
     results_simple['optimal_value'] = optimal_value
@@ -611,7 +768,6 @@ def run_comprehensive_analysis():
         tournament_size=4
     )
     
-    results_complex['fitness_function'] = ga_complex.fitness
     results_complex['weights'] = weights_comp
     results_complex['capacity'] = capacity_comp
     
@@ -643,7 +799,31 @@ def run_comprehensive_analysis():
         results = ga_test.run(**default_params)
         parameter_results[param_name] = results
     
-    # Plot parameter comparison
+   # Encoding type comparison
+    print("\n🔍 ENCODING TYPE COMPARISON")
+    print("-" * 30)
+    
+    encoding_results = {}
+    encoding_types = ['variable_length', 'binary', 'permutation']
+    
+    for encoding in encoding_types:
+        print(f"Testing {encoding} encoding...")
+        ga_encoding = ImprovedKnapsackGA(weights, values, capacity, encoding)
+        results_encoding = ga_encoding.run(
+            pop_size=100,
+            generations=200,
+            crossover_rate=0.8,
+            mutation_rate=0.1
+        )
+        # Add the fitness function and GA instance to results
+        results_encoding['fitness_function'] = ga_encoding.fitness
+        results_encoding['ga_instance'] = ga_encoding
+        encoding_results[encoding] = results_encoding
+    
+    # Create enhanced plots for parameter analysis
+    create_enhanced_plots("Parameter Analysis - Simple Problem", parameter_results, optimal_value, encoding_results)
+    
+    # Plot parameter comparison (original style)
     plt.figure(figsize=(12, 8))
     
     param_names = list(parameter_results.keys())
@@ -679,26 +859,50 @@ def run_comprehensive_analysis():
     
     plt.tight_layout()
     plt.show()
-    
-    # Final summary
+    # Final summary with optimal solution comparison
     print("\n" + "="*60)
-    print("📊 FINAL SUMMARY")
+    print("📊 FINAL SUMMARY WITH OPTIMAL COMPARISON")
     print("="*60)
+    
+    # Find best parameter setting
+    best_param = max(parameter_results.items(), key=lambda x: x[1]['best_fitness'])
+    best_encoding = max(encoding_results.items(), key=lambda x: x[1]['best_fitness'])
+    
     print(f"✅ TASK 1 - Simple Problem:")
-    print(f"   Best Fitness: {results_simple['best_fitness']:,}")
+    print(f"   Best Fitness Found: {results_simple['best_fitness']:,}")
     print(f"   Optimal Fitness: {optimal_value:,}")
     print(f"   Accuracy: {(results_simple['best_fitness']/optimal_value)*100:.2f}%")
     print(f"   Status: {'OPTIMAL FOUND! 🎉' if results_simple['best_fitness'] == optimal_value else 'Very Close ✓'}")
     
     print(f"\n✅ TASK 2 - Complex Problem:")
-    print(f"   Best Fitness: {results_complex['best_fitness']:,}")
+    print(f"   Best Fitness Found: {results_complex['best_fitness']:,}")
     print(f"   Execution Time: {results_complex['execution_time']:.2f}s")
     
-    print(f"\n⚡ Best Parameters Found:")
+    print(f"\n⚡ BEST PERFORMING PARAMETERS:")
+    print(f"   Best Parameter Setting: {best_param[0]}")
+    print(f"   Fitness with Best Parameters: {best_param[1]['best_fitness']:,}")
+    print(f"   Best Encoding Type: {best_encoding[0]}")
+    print(f"   Fitness with Best Encoding: {best_encoding[1]['best_fitness']:,}")
+    
+    print(f"\n📈 RECOMMENDED PARAMETERS:")
     print(f"   Population Size: 150-200")
     print(f"   Crossover Rate: 0.85-0.9") 
     print(f"   Mutation Rate: 0.1-0.15")
     print(f"   Encoding: Variable-length (as required)")
+    
+    print(f"\n🎯 OPTIMAL SOLUTION ACHIEVEMENT:")
+    optimal_achieved = any(results['best_fitness'] == optimal_value for results in parameter_results.values())
+    if optimal_achieved:
+        optimal_params = [name for name, results in parameter_results.items() if results['best_fitness'] == optimal_value]
+        print(f"   🎉 TRUE OPTIMAL FOUND with: {', '.join(optimal_params)}")
+    else:
+        closest = max(parameter_results.items(), key=lambda x: x[1]['best_fitness'])
+        print(f"   ⚠️  Closest to optimal: {closest[0]} ({closest[1]['best_fitness']:,})")
+        
+    print(f"\n📊 ENCODING TYPE PERFORMANCE:")
+    for encoding, results in encoding_results.items():
+        accuracy = (results['best_fitness'] / optimal_value) * 100
+        print(f"   {encoding}: {results['best_fitness']:,} ({accuracy:.2f}% of optimal)")
 
 if __name__ == "__main__":
     run_comprehensive_analysis()

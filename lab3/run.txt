@@ -1,0 +1,1 @@
+PS E:\Genetic-Programing> & C:/Users/1/anaconda3/python.exe e:/Genetic-Programing/lab3/wrapper.py e:/Genetic-Programing/lab3/lab3.py
